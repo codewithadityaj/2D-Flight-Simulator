@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>2D Flight Simulator with Firing</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: skyblue; }
+        canvas { display: block; font-family: Arial, sans-serif; }
+        #gameOverText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            display: none;
+            font-size: 24px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div id="gameOverText">Game Over! Press "ENTER" to Restart</div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const gameOverText = document.getElementById("gameOverText");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let gameRunning = true;
+
+        const plane = {
+            x: 150,
+            y: canvas.height / 2,
+            width: 50,
+            height: 40,
+            lift: 0,
+            gravity: 0.1
+        };
+
+        let backgroundX = 0;
+        let speed = 3;
+        let maxSpeed = 6;
+        let keys = {};
+        let obstacles = [];
+        let bullets = [];
+        let score = 0;
+        let highborn = localStorage.getItem("highscore") || 0;
+        let scoreInterval = null;
+
+        window.addEventListener("keydown", (e) => keys[e.code] = true);
+        window.addEventListener("keyup", (e) => keys[e.code] = false);
+
+        canvas.addEventListener("contextmenu", function(e) {
+            e.preventDefault();
+            bullets.push({
+                x: plane.x + plane.width,
+                y: plane.y + plane.height / 2,
+                width: 10,
+                height: 4,
+                speed: 8
+            });
+        });
+
+        function spawnObstacle() {
+            let obstacleHeight = 30;
+            let obstacleWidth = 60;
+            let randomY = Math.random() * (canvas.height - 150) + 50;
+            obstacles.push({ x: canvas.width, y: randomY, width: obstacleWidth, height: obstacleHeight });
+        }
+
+        const planeImg = new Image();
+        planeImg.src = "plane.png"; 
+        const obstacleImg = new Image();
+        obstacleImg.src = "images.png"
+        function update() {
+            if (!gameRunning) return;
+
+            plane.lift += plane.gravity;
+
+            if (keys["ArrowUp"]) plane.lift -= 0.3;
+            if (keys["ArrowDown"]) plane.lift += 0.3;
+            if (keys["ArrowRight"] && speed < maxSpeed) speed += 0.1;
+            if (keys["ArrowLeft"] && speed > 1) speed -= 0.1;
+
+            plane.y += plane.lift;
+            if (plane.y < 0) plane.y = 0;
+            if (plane.y + plane.height > canvas.height) plane.y = canvas.height - plane.height;
+
+            backgroundX -= speed;
+            if (backgroundX < -canvas.width) backgroundX = 0;
+
+            for (let i = 0; i < obstacles.length; i++) {
+                obstacles[i].x -= speed;
+
+                if (
+                    plane.x < obstacles[i].x + obstacles[i].width &&
+                    plane.x + plane.width > obstacles[i].x &&
+                    plane.y < obstacles[i].y + obstacles[i].height &&
+                    plane.y + plane.height > obstacles[i].y
+                ) {
+                    gameOver();
+                }
+            }
+
+            obstacles = obstacles.filter(obstacle => obstacle.x + obstacle.width > 0);
+
+            if (Math.random() < 0.02) spawnObstacle();
+
+            bullets.forEach((bullet, index) => {
+                bullet.x += bullet.speed;
+                if (bullet.x > canvas.width) bullets.splice(index, 1);
+                obstacles.forEach((obstacle, obsIndex) => {
+                    if (
+                        bullet.x < obstacle.x + obstacle.width &&
+                        bullet.x + bullet.width > obstacle.x &&
+                        bullet.y < obstacle.y + obstacle.height &&
+                        bullet.y + bullet.height > obstacle.y
+                    ) {
+                        bullets.splice(index, 1);
+                        obstacles.splice(obsIndex, 1);
+                    }
+                });
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "black";
+            ctx.font = "30px Arial";
+            ctx.fillText("Score: " + score, canvas.width - 150, 30);
+            ctx.fillText("Best: " + highborn, canvas.width - 150, 70);
+
+            ctx.drawImage(planeImg, plane.x, plane.y, 50, 40);
+
+            ctx.fillStyle = "gray";
+            ctx.fillRect(backgroundX, canvas.height - 50, canvas.width, 50);
+            ctx.fillRect(backgroundX + canvas.width, canvas.height - 50, canvas.width, 50);
+
+            ctx.fillStyle = "black";
+            obstacles.forEach(obstacle => {
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            });
+
+            
+            ctx.fillStyle = "red";
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            gameOverText.style.display = "block";
+            clearInterval(scoreInterval);
+
+            if (score > highborn) {
+                highborn = score;
+                localStorage.setItem("highscore", highborn);
+            }
+        }
+
+        planeImg.onload = function () {
+            draw();
+        };
+
+        function resetGame() {
+            gameRunning = true;
+            plane.y = canvas.height / 2;
+            speed = 3;
+            obstacles = [];
+            bullets = [];
+            score = 0;
+            gameOverText.style.display = "none";
+
+            if (scoreInterval) clearInterval(scoreInterval);
+            scoreInterval = setInterval(() => {
+                if (gameRunning) score += 1;
+            }, 100);
+        }
+
+        window.addEventListener("keydown", (e) => {
+            if (e.code === "Enter") resetGame();
+        });
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
